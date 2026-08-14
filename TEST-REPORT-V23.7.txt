@@ -1,0 +1,35 @@
+THE HABIT MOSAIC V23.7 — SOUL EXPRESSION TEST REPORT
+
+Static/source verification:
+- 26/26 VERIFY-CLEAN-V23 checks PASS.
+- `desktop/main.cjs` passes `node --check`.
+- `characterConstitutionV236.ts + soulExpressionV237.ts + livingSocietyV21.ts` pass TypeScript compile with ES2022/DOM libs.
+- CommunityWorld.tsx / App.tsx / LegendaryRivalry.tsx pass TypeScript transpile syntax diagnostics.
+
+Behavior probes (fallback, không phụ thuộc AI API):
+
+Stimulus: “Tôi lại thất bại rồi”
+- Hải: nhận chữ “lại”, đùa vừa đủ nhưng không dùng user làm punchline.
+- Mai: “Cà khịa ông là phần việc của tôi...” — humor đứng về phía user.
+- Ken: tách event khỏi pattern.
+- Trâm: nhận ra cú trượt hiện tại kéo lịch sử cũ trở lại.
+- Sơn/Leo: giữ ngôn ngữ round/trận nhưng không biến thành quote động lực.
+
+Stimulus: “Hôm nay chỉ học được 15 phút”
+- `minimizingAchievement=true`.
+- NPC phân biệt hụt kỳ vọng và nỗ lực đã có; không dùng “15 phút vẫn tốt mà!” chung chung.
+
+Stimulus: “Tôi nói nghiêm túc, không phải đùa”
+- `correctionSignal=true`.
+- humorPermission=0.
+- 12 NPC có repair line riêng; nhận sai ngắn, không chống chế.
+
+Stimulus: “Hôm nay tôi khá mệt”
+- Các NPC có empathy angle khác nhau: Hải bẻ lái khỏi “cố nốt”; Mai cất muối; Ken nhìn process ăn CPU; Maya bảo vệ ngày mai; Nora cắt scope.
+
+Emotional continuity probe:
+- Sau một interaction mệt/nặng, V21 state lưu worry/tenderness/protectiveness + lastCause thay vì reset.
+- Check-in được lên lịch có xác suất, không bắt buộc mọi tương tác.
+
+Lưu ý môi trường build cuối:
+- Gói clean-install vẫn chạy `npm run lint` và `npm run desktop:local` trên máy Windows của người dùng để kiểm tra đầy đủ dependency/React/Electron trước khi tạo EXE.

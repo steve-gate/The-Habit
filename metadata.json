@@ -1,0 +1,8 @@
+{
+  "name": "The Habit Mosaic",
+  "description": "A habit-building app where daily consistency reveals a stunning digital mosaic, rewarding streaks with rare effects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+release-local/
+build/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.habit-mosaic-cache/
+desktop-backup-*/

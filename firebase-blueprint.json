@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User's progress, streaks, and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "currentStreak": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "lastCheckIn": { "type": "string", "format": "date-time" },
+        "xp": { "type": "number" }
+      },
+      "required": ["uid", "currentStreak", "longestStreak"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A habit the user wants to build",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "frequency"]
+    },
+    "DailyLog": {
+      "title": "Daily Log",
+      "description": "Record of habit completion for a specific day",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "completedHabitIds": { "type": "array" }
+      },
+      "required": ["id", "userId", "date", "completedHabitIds"]
+    },
+    "MosaicArchive": {
+      "title": "Mosaic Archive",
+      "description": "Completed mosaics in the user library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "month": { "type": "string" },
+        "year": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "completionRate": { "type": "number" }
+      },
+      "required": ["id", "userId", "month", "year", "imageUrl"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile data"
+    },
+    "/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "User's defined habits"
+    },
+    "/users/{userId}/daily_logs/{logId}": {
+      "schema": "DailyLog",
+      "description": "Daily habit completion logs"
+    },
+    "/users/{userId}/library/{archiveId}": {
+      "schema": "MosaicArchive",
+      "description": "User's completed mosaic library"
+    }
+  }
+}

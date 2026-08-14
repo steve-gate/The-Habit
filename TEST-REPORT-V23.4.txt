@@ -1,0 +1,20 @@
+THE HABIT MOSAIC V23.4 — SIGNAL / EDITORIAL QUALITY REPORT
+
+Mục tiêu của V23.4:
+- Không biến mọi heartbeat thành tin rác.
+- Chỉ hiển thị khoảnh khắc có bước ngoặt, va chạm, phát hiện hoặc hệ quả thật.
+- Tin thế giới phải đủ đáng bàn và phải là tiếng Việt trước khi vào UI/NPC.
+
+ĐÃ KIỂM TRA:
+1. VERIFY-CLEAN-V23.cjs: PASS 25/25 source/runtime wiring checks.
+2. desktop/main.cjs: node --check PASS.
+3. livingSocietyV21.ts: TypeScript noEmit PASS bằng TypeScript 5.8.3.
+4. CommunityWorld.tsx: TypeScript transpile/syntax PASS.
+5. Migration qualityVersion=234 xóa ambient moment cũ và buộc world sync mới.
+6. World Editorial Gate loại các mẫu filler như practice/joint practice/preview/how-to/opinion/rumor/lịch thi đấu/mẹo/tin đồn.
+7. World topic chỉ được frontend nhận khi storyValue >= 0.58 và nội dung nhìn giống tiếng Việt.
+8. World cards hiển thị “đáng bàn” + whyItMatters thay cho heat đơn thuần.
+9. Heartbeat chỉ surface moment signal >= 0.58; ordinary step vẫn cập nhật private life nhưng không hiện bảng tin.
+10. UI giảm “Chuyện đáng kể” xuống tối đa 4 item và sidebar chỉ 4 NPC nổi bật.
+
+Build Electron cuối cùng vẫn chạy trên máy Windows bằng 00-CAI-MOI-HOAN-TOAN.cmd.

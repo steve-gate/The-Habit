@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+  <title>Cài đặt The Habit Mosaic</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <img src="assets/icon.png" alt="" width="58" height="58" />
+      <div>
+        <p class="eyebrow">THE HABIT MOSAIC DESKTOP V12</p>
+        <h1>Gemini & Windows</h1>
+        <p class="subtitle">Không dùng cổng 3000 hay máy chủ nội bộ. Mở lại bất cứ lúc nào từ menu “Cài đặt” trên cửa sổ chính.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <h2>Google Gemini API</h2>
+          <p>Khóa được lưu bằng Windows safeStorage khi hệ thống hỗ trợ.</p>
+        </div>
+        <button id="openAiStudio" class="link-button" type="button">Lấy API key</button>
+      </div>
+
+      <label for="apiKey">API key</label>
+      <div class="input-row">
+        <input id="apiKey" type="password" autocomplete="off" placeholder="Dán khóa AI Studio mới vào đây" />
+        <button id="toggleKey" class="secondary" type="button">Hiện</button>
+      </div>
+      <p id="keyStatus" class="hint"></p>
+
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+        <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+      </select>
+
+      <div class="actions inline-actions">
+        <button id="testKey" class="secondary" type="button">Kiểm tra kết nối</button>
+        <button id="clearKey" class="danger-ghost" type="button">Xóa khóa đã lưu</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Chạy cùng Windows</h2>
+      <label class="switch-row">
+        <span><strong>Tự khởi động cùng Windows</strong><small>Mở ứng dụng sau khi đăng nhập.</small></span>
+        <input id="launchAtLogin" type="checkbox" />
+      </label>
+      <label class="switch-row">
+        <span><strong>Khởi động ẩn</strong><small>Chỉ hiện biểu tượng ở khay hệ thống.</small></span>
+        <input id="startMinimized" type="checkbox" />
+      </label>
+      <label class="switch-row">
+        <span><strong>Nút thu nhỏ → khay hệ thống</strong><small>Ứng dụng tiếp tục chạy nền.</small></span>
+        <input id="minimizeToTray" type="checkbox" />
+      </label>
+      <label class="switch-row">
+        <span><strong>Nút đóng → khay hệ thống</strong><small>Chỉ “Thoát hoàn toàn” trong menu khay mới tắt ứng dụng.</small></span>
+        <input id="closeToTray" type="checkbox" />
+      </label>
+    </section>
+
+
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <h2>Dữ liệu V12</h2>
+          <p id="persistenceStatus">Đang kiểm tra lớp lưu trữ...</p>
+        </div>
+      </div>
+      <div class="actions inline-actions">
+        <button id="backupNow" class="secondary" type="button">Tạo backup ngay</button>
+        <button id="openDataFolder" class="secondary" type="button">Mở thư mục dữ liệu</button>
+      </div>
+    </section>
+
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+
+    <footer class="actions">
+      <button id="showApp" class="secondary" type="button">Mở ứng dụng</button>
+      <button id="save" class="primary" type="button">Lưu cài đặt</button>
+    </footer>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

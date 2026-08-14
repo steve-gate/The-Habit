@@ -1,0 +1,15 @@
+THE HABIT MOSAIC V23.2 — CLEAN INSTALL TYPECHECK HOTFIX
+
+Đã sửa 7 lỗi TypeScript từ log V23.1:
+1-2) App.tsx: bỏ 2 nhánh tab legacy library/ebook không thể xảy ra với union hiện tại.
+3) CommunityWorld.tsx: ép kiểu Object.values(world.npc) thành NpcState[].
+4) RewardRouteHost.tsx: khai báo props rõ cho RewardBoundary.
+5-7) RewardWorld.tsx: assignments được khai báo Record<string, number>, Object.entries typed rõ và current value typed number.
+
+Static validation trong môi trường đóng gói:
+- VERIFY-CLEAN-V23.cjs: 13/13 PASS.
+- TypeScript transpile syntax toàn bộ src/**/*.ts(x): PASS.
+- desktop/main.cjs node --check: PASS.
+- 4 hotfix markers: PASS.
+
+Lưu ý: full `npm run lint` cần dependency đã được npm install. Installer V23.2 sẽ chạy chính check này trên máy người dùng trước khi build; nếu node_modules từ V23.1 đã tồn tại, installer không tải lại 483 package.

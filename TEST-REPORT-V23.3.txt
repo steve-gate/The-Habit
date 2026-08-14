@@ -1,0 +1,10 @@
+V23.3 static/runtime-focused checks
+
+PASS: livingSocietyV21.ts standalone TypeScript semantic compile.
+PASS: CommunityWorld.tsx TypeScript transpile/syntax.
+PASS: desktop/main.cjs node --check.
+PASS: social-call simulation: “Ok có ai không” schedules one selective social_call comment in seconds, not a village-wide burst.
+PASS: heartbeat simulation seeds concrete ambient moments such as editing video / reading / project work.
+PASS: Vietnamese news policy encoded: Vietnamese-first RSS + Gemini factual translation for foreign topics + drop untranslated foreign topics.
+
+Full React project typecheck/build is performed by 00-CAI-MOI-HOAN-TOAN.cmd on the user's machine after dependencies are installed.

@@ -1,0 +1,26 @@
+THE HABIT MOSAIC V23.8 — TEST REPORT
+
+STATIC / SOURCE
+- PASS 36/36 VERIFY-CLEAN-V23.cjs checks.
+- PASS src/lib/lifeStoryV238.ts standalone TypeScript type-check (TS 5.8.3).
+- PASS all 34 src TS/TSX files syntax-transpile.
+- PASS desktop/main.cjs node --check.
+
+BEHAVIORAL SIMULATION
+- PASS all 12 NPCs initialize with dreams and goals.
+- PASS personal arcs generate attempt/progress/failure/avoidance/discovery/breakthrough beats.
+- PASS private beats and public beats both exist.
+- PASS relationship arcs emerge for pair chemistry stories.
+- PASS verified world topics can create world arcs tied to current goals.
+- PASS repeated failure can pause or abandon a goal instead of forcing endless linear progress.
+- PASS abandoning a goal can generate a smaller replacement goal without killing the dream.
+- PASS paused goals can resume after a cooling-off period.
+- PASS finishing a goal opens a new chapter.
+- PASS after predefined goals are completed, NPC can generate a new goal so life does not stop.
+- PASS dream status can become doubting / transformed / achieved based on life events.
+- PASS close-friends/secret dream meaning is hidden from low-relationship UI.
+- PASS presence card does not leak private story beats.
+- PASS World Awareness still requires Vietnamese-first, fact-locked topics from V23.7 layer.
+
+FINAL WINDOWS CHECK
+00-CAI-MOI-HOAN-TOAN.cmd will still run the full project `npm run lint` and Electron `npm run desktop:local` on the user's Windows machine, where actual installed dependencies are available.

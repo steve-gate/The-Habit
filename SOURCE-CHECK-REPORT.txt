@@ -1,0 +1,50 @@
+THE HABIT MOSAIC V23.8 — SOURCE CHECK REPORT
+
+[PASS] V23.8 Life Story marker
+[PASS] Character Constitution remains wired
+[PASS] Soul Expression V23.7 remains wired
+[PASS] Life Story V23.8 module wired
+[PASS] 12 distinct character constitutions
+[PASS] 12 NPC life blueprints / fallback covered
+[PASS] Dream Engine exists
+[PASS] Dream visibility protects secrets
+[PASS] Goal Engine derives from dreams
+[PASS] Goals include obstacle/strategy/sacrifice
+[PASS] Personal / relationship / world arcs exist
+[PASS] Story beats include failure/avoidance/repair/breakthrough
+[PASS] Private story beats exist
+[PASS] Open loops persist
+[PASS] Dreams/goals visible as human direction
+[PASS] Life story reaches persona-comment AI
+[PASS] Desktop prompt treats Life Story as causal layer
+[PASS] Secret dreams are forbidden from dumping
+[PASS] Story continuity required
+[PASS] Story-aware fallback exists
+[PASS] World topics can enter personal life arcs
+[PASS] Goal completion opens a new chapter
+[PASS] Dream can doubt after confidence loss
+[PASS] Humor remains gated by situation
+[PASS] Emotion still has cross-turn residue
+[PASS] Repair after misread remains
+[PASS] Delayed human check-in remains
+[PASS] No fixed 1.2s NPC reply
+[PASS] Silence/ignore/delayed actions remain
+[PASS] Community + Life heartbeat both wired
+[PASS] World news remains Vietnamese-first
+[PASS] World editorial gate rejects filler
+[PASS] Quality migration is V23.8
+[PASS] V23 Arena still present
+[PASS] Legacy random comment call absent
+[PASS] Portable runtime data beside EXE
+
+36/36 checks PASS.
+V23.8 LIFE STORY + DREAMS + GOALS SOURCE CHECK PASSED.
+
+Additional checks:
+[PASS] src/lib/lifeStoryV238.ts standalone TypeScript type-check
+[PASS] All src TS/TSX files syntax-transpile
+[PASS] desktop/main.cjs syntax
+[PASS] Behavioral simulation: 12 NPC dreams/goals, private/public beats, relationship arcs, world arcs
+[PASS] Behavioral simulation: repeated failures can pause/abandon a goal without killing the dream
+[PASS] Behavioral simulation: private dream meaning hidden until relationship closeness is high
+[PASS] Behavioral simulation: presence card does not leak private story beats
