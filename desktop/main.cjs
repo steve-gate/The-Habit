@@ -956,7 +956,7 @@ function personaCommentPrompt(body) {
     personaName = 'Người bạn đồng hành', personaRole = 'người rèn luyện', bookTitle = '', bookContent = '',
     postContent = '', category = '', goalContext = '', habits = [], userStreak = 0,
     relationshipStage = 'Biết mặt', comedyDNA = [], runningGag = '', recentJokes = '', userMemory = [], seriousness = 'normal', worldContext = '', humorFatigue = 0,
-    voiceProfile = {}, problemMode = false, emotionContext = '', soulContext = '', worldAwareness = '', storyContext = '', lifeStoryContext = '', actionContext = ''
+    voiceProfile = {}, problemMode = false, emotionContext = '', empathyContext = '', soulContext = '', worldAwareness = '', storyContext = '', lifeStoryContext = '', actionContext = ''
   } = body || {};
   const dna = Array.isArray(comedyDNA) && comedyDNA.length ? comedyDNA : comedyDnaFor(personaName);
   const seriousnessRule = seriousness === 'high'
@@ -970,6 +970,7 @@ Bài cần trả lời: “${postContent}”. ${context}.\n
 Goal thật user: ${goalContext || 'duy trì habit và tiến tới mục tiêu thật'}. Habits: ${(habits || []).join(', ') || 'chưa rõ'}. Streak: ${userStreak}.\n
 Relationship: ${relationshipStage}. Comedy DNA: ${dna.join(', ')}. Voice profile: ${JSON.stringify(voiceProfile || {})}. Running gag: ${runningGag || 'chưa có'}. Memory: ${Array.isArray(userMemory) ? userMemory.join(' | ') : String(userMemory || 'chưa có')}. ${worldContext}
 EMOTIONAL CONTINUITY: ${emotionContext || 'không có dữ liệu cảm xúc dài hạn; phản ứng tự nhiên theo bài hiện tại'}.
+CARE READING (chỉ là giả thuyết cần hiệu chỉnh, không phải sự thật tuyệt đối): ${empathyContext || 'chưa có; phải đọc kỹ chi tiết và tránh tự kết luận'}.
 SOUL / THEORY OF MIND: ${soulContext || 'hiểu người trước khi chọn cách đáp; không cần phô ra lời thấu cảm'}.
 WORLD AWARENESS ĐÃ XÁC MINH VÀ ĐÃ CHUẨN HÓA TIẾNG VIỆT: ${worldAwareness || 'không có topic ngoài đời cần dùng'}. Nếu nhắc tin, nói bằng tiếng Việt tự nhiên; chỉ giữ nguyên tên riêng/thương hiệu cần thiết.
 OPEN STORY THREADS: ${storyContext || 'không có vòng chuyện mở liên quan'}.
@@ -979,6 +980,8 @@ ACTION CONTEXT: ${actionContext || 'phản hồi tự nhiên đầu tiên'}.
 ${seriousnessRule}\n
 V23.8 HUMAN EMOTION + LIFE STORY + SOUL EXPRESSION RULES:
 - Viết như một người bạn có cá tính, KHÔNG như AI Coach đội avatar.
+- TRƯỚC KHI VIẾT, suy luận thầm theo 5 bước: (1) chi tiết nào thật sự được nói, (2) cảm xúc/nhu cầu nào chỉ là giả thuyết, (3) quan hệ và ký ức nào liên quan, (4) điều gì dễ làm user thấy bị hiểu sai, (5) một động tác quan tâm phù hợp nhất. KHÔNG xuất 5 bước này, không giải thích phân tích; chỉ trả comment cuối.
+- CARE READING không cấp quyền “đọc tâm trí”. Nếu bằng chứng yếu, dùng một câu hỏi hiệu chỉnh nhẹ thay vì khẳng định. Nếu reply trước đã hỏi một hướng, hãy nhặt chi tiết khác hoặc hiện diện; đừng xếp hàng hỏi cung user.
 - Trước khi đáp, dùng soulContext để hiểu điều người kia thật sự đang cần: vent / validation / company / humor / advice / challenge / space / celebration.
 - CHARACTER DNA LÀ RÀNG BUỘC, KHÔNG PHẢI GỢI Ý: nếu soulContext có characterConstitution, hãy để coreWant/coreFear/contradiction/attentionBias/careLanguage/conflictStyle quyết định nhân vật NHÌN THẤY GÌ và CHỌN LÀM GÌ trước khi chọn câu chữ.
 - Cấm kiểu 'cùng một phản ứng rồi thay vài từ cho đúng persona'. Nếu câu này có thể đổi tên nhân vật mà vẫn hợp, hãy viết lại.

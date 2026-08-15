@@ -12,7 +12,7 @@ const dna = read('src/lib/characterConstitutionV236.ts');
 const soul = read('src/lib/soulExpressionV237.ts');
 const life = read('src/lib/lifeStoryV238.ts');
 const desktop = read('desktop/main.cjs');
-check('V23.8 Life Story marker', community.includes('V23.8 LIVING · LIFE STORY'));
+check('V23.9 Social Ritual marker', community.includes('V23.9 · SOCIAL RITUALS'));
 check('Character Constitution remains wired', community.includes('characterConstitutionV236') && living.includes('characterConstitutionV236'));
 check('Soul Expression V23.7 remains wired', living.includes('buildSoulExpressionPlanV237') && living.includes('soulExpressionFallbackV237'));
 check('Life Story V23.8 module wired', community.includes('heartbeatLifeStoriesV238') && community.includes('lifeStoryPromptContextV238'));
@@ -50,4 +50,4 @@ check('Legacy random comment call absent', !app.includes('triggerVirtualComments
 check('Portable runtime data beside EXE', desktop.includes("path.dirname(process.execPath), 'data'"));
 console.log(`\n${pass}/${total} checks PASS.`);
 if (!ok) process.exit(1);
-console.log('V23.8 LIFE STORY + DREAMS + GOALS SOURCE CHECK PASSED.');
+console.log('V23.9 SOCIAL RITUAL + LIFE STORY SOURCE CHECK PASSED.');

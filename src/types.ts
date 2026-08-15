@@ -121,6 +121,86 @@ export interface SocialComment {
   createdAt: string;
 }
 
+export type SocialRitualNeed =
+  | 'LISTEN_ONLY'
+  | 'VENT'
+  | 'ASK_FOR_ADVICE'
+  | 'NEED_REASSURANCE'
+  | 'NEED_DISTRACTION'
+  | 'NEED_HELP'
+  | 'UNKNOWN';
+
+export type SocialRitualParticipantStatus =
+  | 'invited'
+  | 'joined'
+  | 'tentative'
+  | 'declined'
+  | 'seen'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'left';
+
+export type SocialRitualEventKind =
+  | 'ritual_created'
+  | 'joined'
+  | 'tentative'
+  | 'declined'
+  | 'seen'
+  | 'message'
+  | 'started'
+  | 'paused'
+  | 'resumed'
+  | 'progress'
+  | 'completed'
+  | 'failed'
+  | 'check_in'
+  | 'support_action'
+  | 'ritual_closed';
+
+export interface SocialRitualEvent {
+  id: string;
+  kind: SocialRitualEventKind;
+  actorId: string;
+  at: string;
+  text?: string;
+  visibility: 'timeline' | 'conversation';
+  progress?: number;
+  memoryKey?: string;
+}
+
+export interface SocialRitualParticipant {
+  npcId: string;
+  status: SocialRitualParticipantStatus;
+  joinedAt?: string;
+  availableUntil?: string;
+  progress: number;
+  lastActionAt?: string;
+  reason?: string;
+}
+
+export interface SocialRitualScheduledAction {
+  id: string;
+  actorId: string;
+  kind: SocialRitualEventKind;
+  dueAt: string;
+  behavior: string;
+  progress?: number;
+  state: 'pending' | 'done' | 'cancelled';
+}
+
+export interface SocialRitualRelationshipHistory {
+  ritualsTogether: number;
+  completedTogether: number;
+  npcPulledUserBack: number;
+  userPulledNpcBack: number;
+  brokenPromises: number;
+  careGiven: number;
+  careReceived: number;
+  insideJokes: string[];
+}
+
 export interface SocialPost {
   id: string;
   authorName: string;
@@ -134,6 +214,7 @@ export interface SocialPost {
   communityIntent?: 'confide' | 'companion' | 'challenge';
   communitySession?: {
     mode: 'confide' | 'companion' | 'challenge';
+    creatorId?: string;
     memberIds: string[];
     startedAt: string;
     checkInAt: string;
@@ -141,6 +222,21 @@ export interface SocialPost {
     habitTitle?: string;
     npcCompletedIds: string[];
     userCompleted: boolean;
+    ritualVersion?: 239;
+    conversationNeed?: SocialRitualNeed;
+    participants?: SocialRitualParticipant[];
+    timeline?: SocialRitualEvent[];
+    scheduledActions?: SocialRitualScheduledAction[];
+    relationshipHistory?: Record<string, SocialRitualRelationshipHistory>;
+    appliedEventIds?: string[];
+    replyState?: 'thinking' | 'ready';
+    careReading?: {
+      primaryEmotion: string;
+      intensity: number;
+      need: 'listen' | 'clarify' | 'advice' | 'company' | 'challenge';
+      anchor: string;
+      misreadRisk: string;
+    };
     checkInSent?: boolean;
     status: 'active' | 'completed';
   };

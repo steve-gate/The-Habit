@@ -1,7 +1,7 @@
 {
   "name": "the-habit-mosaic-desktop",
   "private": true,
-  "version": "2.3.8",
+  "version": "2.3.9",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -41,7 +41,7 @@
     "electron-builder": "^26.0.12",
     "rimraf": "^6.0.1"
   },
-  "description": "The Habit Mosaic Desktop V23.8 - Life Story + Dreams + Goals + Soul Expression",
+  "description": "The Habit Mosaic Desktop V23.9 - Living Society + Social Rituals",
   "author": "steve-gate",
   "license": "Apache-2.0",
   "main": "desktop/main.cjs",

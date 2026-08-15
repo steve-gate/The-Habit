@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
-title The Habit Mosaic V23.8 - CLEAN INSTALL
+title The Habit Mosaic V23.9 - CLEAN INSTALL
 chcp 65001 >nul 2>nul
 
 echo ============================================================
-echo THE HABIT MOSAIC V23.8 - CAI MOI / SUA BUILD
+echo THE HABIT MOSAIC V23.9 - CAI MOI / SUA BUILD
 echo ============================================================
 echo Thu muc hien tai:
 echo %CD%
@@ -19,14 +19,14 @@ call npm --version
 if errorlevel 1 goto :FAIL
 
 echo.
-echo [2/6] Kiem tra source V23.8...
+echo [2/6] Kiem tra source V23.9...
 node VERIFY-CLEAN-V23.cjs
 if errorlevel 1 goto :FAIL
 findstr /c:"const activeNpcCount = (Object.values(world.npc) as NpcState[])" "src\components\CommunityWorld.tsx" >nul || goto :BAD_FIX
 findstr /c:"declare props: Readonly<{children:React.ReactNode}>;" "src\components\RewardRouteHost.tsx" >nul || goto :BAD_FIX
 findstr /c:"const assignments:Record<string,number>" "src\components\RewardWorld.tsx" >nul || goto :BAD_FIX
 
-echo [PASS] V23.8 TypeScript hotfix markers
+echo [PASS] V23.9 Social Ritual markers
 
 echo.
 echo [3/6] Kiem tra dependency...
@@ -76,7 +76,7 @@ if exist "!DATA_BACKUP!" rmdir /s /q "!DATA_BACKUP!"
 
 echo.
 echo ============================================================
-echo [PASS] V23.8 TYPECHECK + BUILD HOAN TAT
+echo [PASS] V23.9 TYPECHECK + BUILD HOAN TAT
 echo EXE: %CD%\release-local\win-unpacked\The Habit Mosaic.exe
 echo DATA: %CD%\release-local\win-unpacked\data
 echo ============================================================
@@ -88,7 +88,7 @@ goto :END
 
 :BAD_FIX
 echo.
-echo [FAIL] Source khong phai V23.8 hotfix day du.
+echo [FAIL] Source khong phai V23.9 Social Ritual day du.
 goto :FAIL
 
 :RESTORE_FAIL

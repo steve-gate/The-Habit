@@ -4,6 +4,11 @@ import { Activity, Brain, CalendarClock, CheckCircle2, Clock3, Eye, HandHeart, H
 import { DailyLog, Ebook, Habit, SocialComment, SocialPost } from '../types';
 import { characterConstitutionFor, personaPairChemistryLine } from '../lib/characterConstitutionV236';
 import { getLifeStoryMomentsV238, getNpcLifeCardV238, getOpenLifeArcsV238, heartbeatLifeStoriesV238, lifeStoryPromptContextV238, storyAwareFallbackV238 } from '../lib/lifeStoryV238';
+import {
+  advanceSocialRitual, chooseRitualMembers, completeRitualSpeech, createSocialRitual, inferRitualNeed,
+  initialRitualSpeakers, migrateSocialRitual, recordRitualMessage, recordSupportAction, ritualEventLabel,
+} from '../lib/socialRitualEngineV239';
+import type { SocialRitualEvent, SocialRitualScheduledAction } from '../types';
 // V21_LIVING_SOCIETY_INTEGRATION
 import {
   chooseLivingActor, chooseSocialPartner, decideLivingEvent, drainDueUserReactions, expertForTopic, getAmbientMoments, getNpcPresenceCard, getStoryContextForNpc,
@@ -35,12 +40,6 @@ const COMMUNITY_INTENTS: { id: CommunityIntent; label: string; hint: string }[] 
   { id: 'companion', label: 'Cùng tiến', hint: 'Cho mình một người đồng hành' },
   { id: 'challenge', label: 'Mở thử thách', hint: 'Cùng làm một việc thật' },
 ];
-
-const CIRCLE_MEMBERS: Record<CommunityIntent, string[]> = {
-  confide: ['hm-tram', 'hm-maya', 'hm-nora'],
-  companion: ['hm-aiko', 'hm-hai', 'hm-nora'],
-  challenge: ['hm-son', 'hm-leo', 'hm-aiko'],
-};
 
 interface NpcRoutine {
   wakeHour: number;
@@ -176,12 +175,84 @@ const SOCIAL_PERSONAS: any[] = [
   { id:'hm-nora', name:'Nora', role:'Người thực tế', avatar:avatar('NoraPractical') },
 ];
 
+type CareReading = NonNullable<SocialPost['communitySession']>['careReading'];
+
+const inferCareReading = (content: string, intent: CommunityIntent): CareReading => {
+  const text = String(content || '').trim();
+  const lower = text.toLocaleLowerCase('vi-VN');
+  const anchor = (text.split(/[.!?\n]/).find(part => part.trim().length >= 4) || text).trim().slice(0, 88);
+  const hasLoss = /mất tiền|mất việc|bị lừa|thiệt hại|mất mát|đánh mất/.test(lower);
+  const hasAnger = /ức chế|tức|bực|cáu|điên|khó chịu|bất công/.test(lower);
+  const hasShame = /xấu hổ|nhục|tệ|vô dụng|thất bại|lại hỏng|lại fail/.test(lower);
+  const hasExhaustion = /kiệt sức|mệt|đuối|cạn pin|quá tải|không chịu nổi/.test(lower);
+  const hasLoneliness = /cô đơn|một mình|không ai|chẳng ai|có ai không/.test(lower);
+  const hasFear = /sợ|lo|hoảng|bất an|không biết.*sao/.test(lower);
+  const primaryEmotion = hasLoss && hasAnger ? 'tổn thất kèm bức bối'
+    : hasLoss ? 'tổn thất'
+      : hasShame ? 'thất vọng và dễ tự trách'
+        : hasExhaustion ? 'quá tải'
+          : hasLoneliness ? 'cô độc'
+            : hasFear ? 'lo lắng'
+              : hasAnger ? 'bực và bất lực'
+                : intent === 'challenge' ? 'quyết tâm cạnh tranh'
+                  : intent === 'companion' ? 'muốn có người cùng bước'
+                    : 'cảm xúc chưa đủ rõ';
+  let intensity = /rất|quá|không chịu nổi|tuyệt vọng|kiệt sức/.test(lower) ? 4 : 2;
+  if (hasLoss || hasShame || hasLoneliness) intensity += 1;
+  intensity = Math.min(5, intensity);
+  const need: CareReading['need'] = /cho.*lời khuyên|phải làm sao|nên làm gì|giúp.*cách/.test(lower) ? 'advice'
+    : /tại sao|vì sao|không hiểu|gỡ rối/.test(lower) ? 'clarify'
+      : /ở đây|có ai|một mình|cùng tôi|cùng nhau/.test(lower) ? 'company'
+        : intent === 'challenge' ? 'challenge'
+          : intent === 'companion' ? 'company'
+            : 'listen';
+  const misreadRisk = intensity >= 4 && need !== 'advice'
+    ? 'khuyên hoặc đùa quá sớm'
+    : primaryEmotion === 'cảm xúc chưa đủ rõ'
+      ? 'tự kết luận thay người dùng'
+      : 'nhắc lại sáo rỗng mà không chạm đúng chi tiết';
+  return { primaryEmotion, intensity, need, anchor, misreadRisk };
+};
+
+const groundedCareReply = (personaId: string, reading: CareReading, content: string) => {
+  const lower = content.toLocaleLowerCase('vi-VN');
+  const loss = /mất tiền|bị lừa|thiệt hại/.test(lower);
+  if (personaId === 'hm-tram') {
+    if (loss) return 'Mất tiền đã đau; chữ “ức chế” nghe như còn có phần bất lực hoặc bất công ở đó. Tôi đoán có đúng không?';
+    if (reading.primaryEmotion.includes('tự trách')) return 'Tôi nghe bạn kể một chuyện đã hỏng, nhưng bạn đang nói về mình như thể chính bạn là thứ bị hỏng. Hai chuyện đó khác nhau.';
+    if (reading.primaryEmotion === 'quá tải') return 'Nghe như bạn đã phải gồng lâu hơn một ngày. Muốn tôi hỏi tiếp, hay chỉ ngồi đây một lúc?';
+    return `Tôi để ý đoạn “${reading.anchor}”. Cái nặng nhất là chuyện đã xảy ra, hay cảm giác còn sót lại sau đó?`;
+  }
+  if (personaId === 'hm-maya') {
+    if (loss) return 'Tôi không kéo bạn sang “nghĩ tích cực” lúc này. Bạn muốn kể phần tiền đã mất, hay phần khiến bạn thấy bị dồn nhất?';
+    if (reading.primaryEmotion.includes('bực')) return 'Cơn bực này có vẻ đang giữ hộ một điều khác. Có phải bạn thấy mình không kiểm soát được chuyện đó?';
+    if (reading.need === 'company') return 'Tôi ở đây. Chưa cần giải quyết ngay—bạn muốn kể tiếp thì kể, muốn im một chút cũng được.';
+    return `Tôi chưa chắc đã hiểu hết câu “${reading.anchor}”. Bạn muốn được nghe lại cho rõ, hay muốn cùng gỡ một nút thôi?`;
+  }
+  return `Lúc trước bạn nói “${reading.anchor}”. Giờ nếu chấm độ nặng từ 1 đến 10, nó đang ở mức nào?`;
+};
+
+const ritualCareFallback = (personaId: string, text: string, need: string | undefined) => {
+  const lower = text.toLocaleLowerCase('vi-VN');
+  const beingDismissed = /giả vờ.*không|coi như.*không|phủi|chối|không nhận/.test(lower);
+  if (personaId === 'hm-hai') return 'Tôi không biết nói gì cho hay. Nhưng tôi đang đọc đây; ông cứ kể tiếp.';
+  if (personaId === 'hm-tu') return beingDismissed
+    ? 'Vậy phần làm ông bực không chỉ là tiền, mà là cách người đó phủi luôn chuyện đã xảy ra. Tôi nghe tiếp.'
+    : 'Tôi chưa kết luận gì đâu. Ông cứ kể tiếp phần ông muốn kể.';
+  if (personaId === 'hm-mai') return 'Nay tôi cất muối. Ông tự bực đủ rồi; cứ nói tiếp đi.';
+  if (personaId === 'hm-son' || personaId === 'hm-leo') return 'Tôi không giỏi đoạn này. Nhưng tôi có mặt. Kể tiếp đi.';
+  if (personaId === 'hm-ken') return 'Đã đọc. Tôi không chen bản sửa vào lúc này.';
+  if (personaId === 'hm-aiko') return 'Tôi nghe đây. Không cần biến nó thành bài học ngay.';
+  if (personaId === 'hm-nora') return 'Ừ. Chưa cần xử lý gì cả. Nói nốt phần đang mắc đi.';
+  if (personaId === 'hm-maya') return 'Tôi ở đây. Bạn muốn kể tiếp thì kể; muốn dừng một chút cũng được.';
+  if (need === 'LISTEN_ONLY' || need === 'VENT') return 'Ừ. Kể tiếp đi. Tôi nghe.';
+  return '';
+};
+
 const circleOpeningLine = (personaId: string, intent: CommunityIntent, content: string, habitTitle = '') => {
   const excerpt = content.length > 74 ? `${content.slice(0, 71).trim()}…` : content;
   if (intent === 'confide') {
-    if (personaId === 'hm-tram') return `Tôi nghe câu “${excerpt}”. Phần nào trong chuyện này đang làm bạn nghẹn nhất?`;
-    if (personaId === 'hm-maya') return 'Bạn không cần biến chuyện này thành bài học ngay. Muốn kể từ đầu, hay muốn bọn tôi chỉ ngồi đây với bạn một lúc?';
-    return 'Tôi chưa vội khuyên gì. Tôi sẽ quay lại hỏi bạn sau, để chuyện này không bị trôi mất.';
+    return groundedCareReply(personaId, inferCareReading(content, intent), content);
   }
   if (intent === 'companion') {
     if (personaId === 'hm-aiko') return `Tôi vào nhóm. “${habitTitle || excerpt}” — hôm nay tôi cũng làm một lượt, xong sẽ quay lại báo.`;
@@ -193,8 +264,10 @@ const circleOpeningLine = (personaId: string, intent: CommunityIntent, content: 
   return 'Tôi nhận kèo. Báo trước: tôi chuyên hụt nhịp đầu rồi quay lại ở đoạn cuối.';
 };
 
-const circleProgressLine = (personaId: string, intent: CommunityIntent, habitTitle = '') => {
-  if (intent === 'confide') return 'Tôi quay lại hỏi thật: giờ chuyện này còn nặng như lúc bạn viết không?';
+const circleProgressLine = (personaId: string, intent: CommunityIntent, habitTitle = '', careReading?: CareReading) => {
+  if (intent === 'confide') return careReading
+    ? `Lúc trước bạn nói “${careReading.anchor}”. Giờ nếu chấm độ nặng từ 1 đến 10, nó đang ở mức nào?`
+    : 'Tôi quay lại hỏi thật: giờ chuyện này còn nặng như lúc bạn viết không?';
   const persona = SOCIAL_PERSONAS.find((item:any) => item.id === personaId);
   if (intent === 'companion') return `${persona?.name || 'Một người trong nhóm'} báo phần mình: “${habitTitle}” đã xong. Không để bạn làm một mình.`;
   return `${persona?.name || 'Đối thủ'} đã hoàn thành “${habitTitle}”. Bảng điểm vừa đổi.`;
@@ -1078,20 +1151,43 @@ const makeWorldEvent = (
   };
 };
 
-const eventToPost = (event: WorldEvent, _now: number): SocialPost => ({
-  id: `osle-post-${event.id}`,
-  authorName: event.npcName,
-  authorAvatar: event.npcAvatar,
-  content: event.content,
-  type: 'habit',
-  createdAt: event.createdAt,
-  likes: 0,
-  comments: [],
-});
+const eventToPost = (event: WorldEvent, _now: number, availableHabits: Habit[] = []): SocialPost => {
+  const id = `osle-post-${event.id}`;
+  const startedAt = new Date(event.createdAt).getTime() || Date.now();
+  // Only meaningful story beats can self-open a ritual; routine filler never does.
+  // Companion/challenge rituals bind to a real user habit so accepting one has consequences.
+  const selectedHabit = availableHabits.length ? availableHabits[hash(`${id}|ritual-habit`) % availableHabits.length] : undefined;
+  const ritualMode: CommunityIntent | undefined = event.kind === 'npc_fail' && event.tier >= 3
+    ? 'confide'
+    : selectedHabit && event.kind === 'comeback' && event.tier >= 3
+      ? 'companion'
+      : selectedHabit && (event.kind === 'duel' || event.kind === 'milestone') && event.tier >= 4
+        ? 'challenge'
+        : undefined;
+  const otherMembers = ritualMode ? chooseRitualMembers(ritualMode, id, SOCIAL_PERSONAS.map((persona:any) => persona.id).filter(npcId => npcId !== event.npcId)) : [];
+  const memberIds = ritualMode === 'confide' ? otherMembers : ritualMode ? [event.npcId, ...otherMembers.slice(0, 2)] : [];
+  const deadline = startedAt + (ritualMode === 'challenge' ? 24 : ritualMode === 'companion' ? 6 : 12) * 60 * 60_000;
+  return {
+    id,
+    authorName: event.npcName,
+    authorAvatar: event.npcAvatar,
+    content: event.content,
+    type: 'habit',
+    createdAt: event.createdAt,
+    likes: 0,
+    comments: [],
+    communityIntent: ritualMode,
+    communitySession: ritualMode ? {
+      ...createSocialRitual({ postId: id, mode: ritualMode, content: event.content, creatorId: event.npcId, habitId: ritualMode === 'confide' ? undefined : selectedHabit?.id, habitTitle: ritualMode === 'confide' ? undefined : selectedHabit?.title, memberIds, startedAt, checkInAt: deadline }),
+      careReading: inferCareReading(event.content, ritualMode),
+    } : undefined,
+    challenge: ritualMode === 'challenge' && selectedHabit ? { habitId: selectedHabit.id, title: selectedHabit.title, deadline: new Date(deadline).toISOString(), participants: memberIds.length, participantIds: memberIds } : undefined,
+  };
+};
 const weakLegacySocialLine = (text:string) => {
   const t=String(text||'').trim().toLocaleLowerCase('vi-VN');
   if(!t)return false;
-  return /ổn\.?\s*cứ để tiến bộ nhỏ|cố lên|đừng bỏ cuộc|hãy tiếp tục|mỗi bước nhỏ|không sao.*(?:cố|ngày mai)|kỷ luật là chìa khóa|hỏi hay thì cứ hỏi|làm thật mới tài|giữ cho bền/.test(t);
+  return /ổn\.?\s*cứ để tiến bộ nhỏ|cố lên|đừng bỏ cuộc|hãy tiếp tục|mỗi bước nhỏ|không sao.*(?:cố|ngày mai)|kỷ luật là chìa khóa|hỏi hay thì cứ hỏi|làm thật mới tài|giữ cho bền|tôi hiểu cảm giác|mình hiểu bạn|mọi chuyện rồi sẽ ổn|bạn không đơn độc|tôi có giả thuyết,? nhưng cho fact trước/.test(t);
 };
 const isKnownNpcName=(name:string)=>SOCIAL_PERSONAS.some((p:any)=>String(p.name||'')===String(name||''));
 
@@ -1103,6 +1199,8 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
   const postsRef = useRef<SocialPost[]>(posts);
   const mountedRef = useRef(false);
   const completionWatcherReadyRef = useRef(false);
+  const circleRepliesInFlightRef = useRef<Set<string>>(new Set());
+  const ritualActionsInFlightRef = useRef<Set<string>>(new Set());
   const [newPostContent, setNewPostContent] = useState('');
   const [postIntent, setPostIntent] = useState<CommunityIntent>('confide');
   const [challengeHabitId, setChallengeHabitId] = useState('');
@@ -1239,7 +1337,7 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
 
     if (accepted.length) {
       accepted.forEach(event => queueNpcPostReactions(event, `osle-post-${event.id}`, SOCIAL_PERSONAS, nextWorld.npc));
-      const newPosts = accepted.map(event => eventToPost(event, now));
+      const newPosts = accepted.map(event => eventToPost(event, now, liveContextRef.current.habits));
       setPosts(prev => {
         const existingIds = new Set(prev.map(post => post.id));
         const existingFp = new Set(prev.slice(0, 50).map(post => contentFingerprint(post.content)).filter(Boolean));
@@ -1548,6 +1646,7 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
     if (!bridge?.requestApi) return '';
     try {
       const recent = npc.recentJokes.slice(-5).join(' | ');
+      const careReading = post.communitySession?.careReading || inferCareReading(post.content, post.communityIntent || 'companion');
       const intentContext = post.communityIntent === 'confide'
         ? 'Đây là lời tâm sự. Trước hết hãy lắng nghe và phản hồi vào một chi tiết cụ thể; không giảng đạo, không ép người dùng tích cực.'
         : post.communityIntent === 'companion'
@@ -1574,6 +1673,7 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
         seriousness: isSeriousText(post.content) ? 'high' : 'normal',
         emotion: emotionForText(post.content),
         emotionContext: emotionPromptContext(npc),
+        empathyContext: JSON.stringify(careReading),
         soulContext: JSON.stringify(soulPromptContext(persona.id, post.content, npc.relationship, npc.humorFatigue || 0)),
         actionContext: [intentContext, actionContext].filter(Boolean).join(' '),
         worldAwareness: getWorldContextForNpc(persona.id),
@@ -1682,76 +1782,121 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Upgrade posts created by the first intent-only UI so the user's existing posts
-  // immediately become real circles instead of remaining cosmetic labels.
+  // V23.9 migrates both intent-only cards and the first circle implementation into
+  // one Social Ritual model. Old comments stay intact; only missing event state is added.
   useEffect(() => {
     setPosts(prev => {
       let changed = false;
       const next = prev.map(post => {
-        if (!post.communityIntent || post.communitySession) return post;
+        if (!post.communityIntent) return post;
+        const now = Date.now();
+        if (!post.communitySession) {
+          const mode = post.communityIntent;
+          const startedAt = new Date(post.createdAt).getTime() || now;
+          const memberIds = chooseRitualMembers(mode, post.id, SOCIAL_PERSONAS.map((persona:any) => persona.id));
+          const habitId = post.challenge?.habitId;
+          const habitTitle = post.challenge?.title || (mode === 'companion' ? post.content : undefined);
+          const delay = mode === 'confide' ? 12 * 60 * 60_000 : mode === 'companion' ? 6 * 60 * 60_000 : 24 * 60 * 60_000;
+          changed = true;
+          return {
+            ...post,
+            communitySession: {
+              ...createSocialRitual({ postId: post.id, mode, content: post.content, habitId, habitTitle, memberIds, startedAt, checkInAt: startedAt + delay, userCompleted: !!habitId && todayCompletedIds.includes(habitId) }),
+              careReading: inferCareReading(post.content, mode),
+              replyState: 'ready' as const,
+            },
+            challenge: post.challenge ? { ...post.challenge, participants: memberIds.length + 1, participantIds: ['local-user', ...memberIds] } : undefined,
+          };
+        }
+        const migrated = migrateSocialRitual(post, SOCIAL_PERSONAS.map((persona:any) => persona.id), now);
+        if (!migrated || migrated === post.communitySession) return post;
         changed = true;
-        const mode = post.communityIntent;
-        const memberIds = CIRCLE_MEMBERS[mode];
-        const startedAt = new Date(post.createdAt).getTime() || Date.now();
-        const habitId = post.challenge?.habitId;
-        const habitTitle = post.challenge?.title || (mode === 'companion' ? post.content : undefined);
-        const delay = mode === 'confide' ? 90 * 60_000 : mode === 'companion' ? 4 * 60 * 60_000 : 12 * 60 * 60_000;
-        const existingAuthors = new Set((post.comments || []).map(comment => comment.authorId));
-        const openingComments = memberIds.slice(0, 2).filter(id => !existingAuthors.has(id)).map((memberId, index) => circleComment(
-          memberId,
-          circleOpeningLine(memberId, mode, post.content, habitTitle),
-          `circle-migrated-${post.id}-${memberId}`,
-          new Date(Math.max(Date.now(), startedAt + index * 1000)).toISOString(),
-        ));
-        return {
-          ...post,
-          comments: [...(post.comments || []), ...openingComments],
-          communitySession: {
-            mode,
-            memberIds,
-            startedAt: new Date(startedAt).toISOString(),
-            checkInAt: new Date(startedAt + delay).toISOString(),
-            habitId,
-            habitTitle,
-            npcCompletedIds: [],
-            userCompleted: !!habitId && todayCompletedIds.includes(habitId),
-            status: 'active',
-          },
-          challenge: post.challenge ? { ...post.challenge, participants: memberIds.length + 1, participantIds: ['local-user', ...memberIds] } : undefined,
-        };
+        return { ...post, communitySession: migrated };
       });
       return changed ? next : prev;
     });
   }, [completionSignature, setPosts]);
 
-  // Community sessions keep living after the first post: listening circles check back,
-  // while companion/challenge groups advance against real habit completion.
+  const applyRitualConsequences = (post: SocialPost, events: SocialRitualEvent[]) => {
+    const relationshipTarget = post.communitySession?.creatorId?.startsWith('hm-') ? post.communitySession.creatorId : 'local-user';
+    events.forEach(ritualEvent => {
+      if (!ritualEvent.actorId.startsWith('hm-')) return;
+      if (ritualEvent.actorId === relationshipTarget) return;
+      const isCare = ritualEvent.kind === 'message' || ritualEvent.kind === 'check_in' || ritualEvent.kind === 'support_action';
+      const isSharedWork = ritualEvent.kind === 'completed' || ritualEvent.kind === 'resumed';
+      const isBroken = ritualEvent.kind === 'failed';
+      updateRelationship(ritualEvent.actorId, relationshipTarget, {
+        closeness: isCare ? .018 : isSharedWork ? .025 : .004,
+        trust: isCare ? .015 : isSharedWork ? .02 : isBroken ? -.008 : .003,
+        respect: isSharedWork ? .025 : isBroken ? -.004 : .002,
+        emotionalSafety: isCare ? .018 : .002,
+        playfulness: post.communityIntent === 'challenge' && isSharedWork ? .012 : .002,
+      }, `social ritual ${post.communityIntent || 'community'}: ${ritualEvent.kind}`);
+      if (isCare || isSharedWork || isBroken) remember(ritualEvent.actorId, {
+        type: isCare ? 'relationship' : 'episode',
+        subject: post.communityIntent === 'confide' ? `đã ở cạnh ${post.authorName}` : post.communityIntent === 'companion' ? `đã cùng tiến với ${post.authorName}` : `kèo với ${post.authorName}`,
+        content: `${ritualEvent.kind}: ${post.communitySession?.habitTitle || post.content}`.slice(0, 180),
+        salience: isSharedWork ? .72 : isCare ? .66 : .58,
+        emotionalWeight: isCare ? .64 : .5,
+        confidence: .96,
+        decayHalfLifeHours: 960,
+        sourceId: ritualEvent.id,
+      });
+    });
+  };
+
+  const realizeScheduledRitualSpeech = async (post: SocialPost, action: SocialRitualScheduledAction) => {
+    if (!post.communitySession || ritualActionsInFlightRef.current.has(action.id)) return;
+    ritualActionsInFlightRef.current.add(action.id);
+    try {
+      const persona = SOCIAL_PERSONAS.find((item:any) => item.id === action.actorId);
+      if (!persona) return;
+      const npc = worldRef.current.npc[action.actorId] || createNpcState(persona);
+      const transcript = (post.comments || []).slice(-6).map(comment => `${comment.authorName}: ${comment.content}`).join(' | ');
+      const ritualPost = { ...post, content: post.content };
+      const actionContext = `SOCIAL RITUAL V23.9. Hành vi đã được NPC Brain chọn: ${action.behavior}. Need=${post.communitySession.conversationNeed || 'UNKNOWN'}. Timeline gần đây: ${transcript || 'chưa ai nói'}. Giữ nguyên tính cách ngoài feed. Có quyền nói vụng/ngắn; không biến thành chuyên gia tâm lý. Chỉ hiện thực hóa hành vi thành đúng một lời nói tự nhiên.`;
+      let text = await askAiReply(persona, ritualPost, npc, actionContext);
+      if (!text || weakLegacySocialLine(text)) text = action.kind === 'check_in'
+        ? followUpReplyV237(persona.id, post.content, action.id)
+        : soulFallbackReply(persona.id, persona.name, post.content, npc.relationship, action.id);
+      const createdAt = new Date().toISOString();
+      const comment = circleComment(action.actorId, text, `ritual-speech-${action.id}`, createdAt);
+      let consequenceEvent: SocialRitualEvent | undefined;
+      setPosts(prev => prev.map(item => {
+        if (item.id !== post.id || !item.communitySession || (item.comments || []).some(existing => existing.id === comment.id)) return item;
+        const nextSession = completeRitualSpeech(item.communitySession, action, text, Date.now());
+        consequenceEvent = nextSession.timeline?.find(timelineEvent => timelineEvent.id === action.id);
+        return { ...item, comments: [...(item.comments || []), comment], communitySession: nextSession };
+      }));
+      if (consequenceEvent) applyRitualConsequences(post, [consequenceEvent]);
+      recordNpcInteraction(persona.id, post.content, text, action.id);
+    } finally {
+      ritualActionsInFlightRef.current.delete(action.id);
+    }
+  };
+
+  // Social rituals advance as event timelines. A participant may start, pause, fail,
+  // decline or stay silent; only actual habit data can complete the user's side.
   useEffect(() => {
     const advanceSessions = () => {
       const now = Date.now();
+      const speechQueue: Array<{ post: SocialPost; action: SocialRitualScheduledAction }> = [];
+      const consequenceQueue: Array<{ post: SocialPost; events: SocialRitualEvent[] }> = [];
       setPosts(prev => {
         let anyChanged = false;
         const next = prev.map(post => {
           const session = post.communitySession;
-          if (!session || session.status === 'completed') return post;
-          let nextSession = { ...session, npcCompletedIds: [...session.npcCompletedIds] };
+          if (!session || session.ritualVersion !== 239 || session.status === 'completed') return post;
+          let workingSession = session;
           let comments = [...(post.comments || [])];
-          let changed = false;
-
-          if (session.mode === 'confide') {
-            if (!session.checkInSent && now >= new Date(session.checkInAt).getTime()) {
-              const memberId = session.memberIds[2] || session.memberIds[0];
-              const commentId = `circle-checkin-${post.id}`;
-              if (!comments.some(comment => comment.id === commentId)) {
-                comments.push(circleComment(memberId, circleProgressLine(memberId, 'confide'), commentId, new Date().toISOString()));
-              }
-              nextSession = { ...nextSession, checkInSent: true, status: 'completed' };
-              changed = true;
-            }
-          } else {
-            const habitDone = !!session.habitId && todayCompletedIds.includes(session.habitId);
-            if (habitDone && !session.userCompleted) {
-              const witnessId = session.memberIds[0];
+          const userEvents: SocialRitualEvent[] = [];
+          const habitDone = session.mode !== 'confide' && !!session.habitId && todayCompletedIds.includes(session.habitId);
+          if (habitDone && !session.userCompleted) {
+              const completedAt = new Date().toISOString();
+              const userEvent: SocialRitualEvent = { id: `ritual-${post.id}-user-completed`, kind: 'completed', actorId: 'local-user', at: completedAt, visibility: 'timeline', progress: 100, memoryKey: `user-completed-${session.habitId}` };
+              workingSession = { ...workingSession, userCompleted: true, timeline: [...(workingSession.timeline || []), userEvent] };
+              userEvents.push(userEvent);
+              const witnessId = session.participants?.find(participant => ['joined','active','completed'].includes(participant.status))?.npcId || session.memberIds[0];
               const commentId = `circle-user-done-${post.id}`;
               if (!comments.some(comment => comment.id === commentId)) {
                 const line = session.mode === 'challenge'
@@ -1759,43 +1904,83 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
                   : `Bạn đã làm xong “${session.habitTitle}”. Nhóm này có bằng chứng đầu tiên rồi.`;
                 comments.push(circleComment(witnessId, line, commentId, new Date().toISOString()));
               }
-              nextSession.userCompleted = true;
-              changed = true;
-            }
-
-            const elapsed = now - new Date(session.startedAt).getTime();
-            const dueTimes = session.mode === 'challenge'
-              ? [60, 240, 600].map(minutes => minutes * 60_000)
-              : [45, 120, 300].map(minutes => minutes * 60_000);
-            session.memberIds.forEach((memberId, index) => {
-              if (elapsed < dueTimes[index] || nextSession.npcCompletedIds.includes(memberId)) return;
-              nextSession.npcCompletedIds.push(memberId);
-              const commentId = `circle-npc-done-${post.id}-${memberId}`;
-              if (!comments.some(comment => comment.id === commentId)) {
-                comments.push(circleComment(memberId, circleProgressLine(memberId, session.mode, session.habitTitle), commentId, new Date().toISOString()));
-              }
-              changed = true;
-            });
-
-            const deadlinePassed = !!post.challenge && now >= new Date(post.challenge.deadline).getTime();
-            const companionFinished = session.mode === 'companion' && nextSession.userCompleted && nextSession.npcCompletedIds.length >= 2;
-            if (deadlinePassed || companionFinished) {
-              nextSession.status = 'completed';
-              changed = true;
-            }
           }
-
+          const advanced = advanceSocialRitual(workingSession, now);
+          const changed = userEvents.length > 0 || advanced.newEvents.length > 0;
+          advanced.dueSpeechActions.forEach(action => speechQueue.push({ post: { ...post, comments, communitySession: advanced.session }, action }));
+          if (advanced.newEvents.length) consequenceQueue.push({ post, events: advanced.newEvents });
           if (!changed) return post;
           anyChanged = true;
-          return { ...post, comments, communitySession: nextSession };
+          return { ...post, comments, communitySession: advanced.session };
         });
         return anyChanged ? next : prev;
       });
+      consequenceQueue.forEach(item => applyRitualConsequences(item.post, item.events));
+      speechQueue.forEach(item => { void realizeScheduledRitualSpeech(item.post, item.action); });
     };
     advanceSessions();
     const id = setInterval(advanceSessions, 60_000);
     return () => clearInterval(id);
   }, [completionSignature, setPosts]);
+
+  const addThoughtfulCircleReplies = async (post: SocialPost) => {
+    const session = post.communitySession;
+    if (!session || circleRepliesInFlightRef.current.has(post.id)) return;
+    circleRepliesInFlightRef.current.add(post.id);
+    try {
+      const reading = session.careReading || inferCareReading(post.content, session.mode);
+      const priorReplies: string[] = [];
+      const speakerIds = initialRitualSpeakers(session);
+      const needRule = session.mode === 'confide'
+        ? `Need=${session.conversationNeed || inferRitualNeed(post.content)}. LISTEN_ONLY cấm lời khuyên; VENT ưu tiên hiện diện hoặc “kể tiếp đi”.`
+        : '';
+      const authorRule = session.creatorId?.startsWith('hm-')
+        ? `Người mở ritual là NPC ${post.authorName}, không phải user. Hãy phản ứng với ${post.authorName} như một người bạn có đời sống riêng.`
+        : 'Người mở ritual là user.';
+      const roles = session.mode === 'confide'
+        ? ['phản chiếu đúng một chi tiết và kiểm tra giả thuyết; có thể chỉ nói một câu vụng nhưng thật']
+        : session.mode === 'companion'
+          ? ['tự nhận một phần việc/thời lượng thật', 'nói rõ giới hạn thời gian hoặc lực cản của chính mình']
+          : ['nhận kèo đúng cá tính và chốt cách tính', 'tạo áp lực cạnh tranh bằng giới hạn thật, không hô khẩu hiệu'];
+
+      for (let index = 0; index < speakerIds.length; index++) {
+        const memberId = speakerIds[index];
+        const persona = SOCIAL_PERSONAS.find((item:any) => item.id === memberId);
+        if (!persona) continue;
+        const npc = worldRef.current.npc[memberId] || createNpcState(persona);
+        const actionContext = `SOCIAL RITUAL V23.9, không phải chế độ tạo comment. ${authorRule} NPC Brain đã chọn hành vi nói. Vai trò lượt này: ${roles[index] || roles[0]}. ${needRule} Giữ nguyên careLanguage/conflictStyle ngoài feed. ${priorReplies.length ? `Người trước đã nói: ${priorReplies.join(' | ')}. Không lặp.` : 'Không cần nói cho đủ đội hình.'}`;
+        let content = await askAiReply(persona, post, npc, actionContext);
+        if (!content || weakLegacySocialLine(content) || priorReplies.some(reply => contentFingerprint(reply) === contentFingerprint(content))) {
+          content = session.mode === 'confide'
+            ? ritualCareFallback(memberId, post.content, session.conversationNeed) || groundedCareReply(memberId, reading, post.content)
+            : circleOpeningLine(memberId, session.mode, post.content, session.habitTitle);
+        }
+        priorReplies.push(content);
+        const createdAt = new Date().toISOString();
+        const comment = circleComment(memberId, content, `circle-thoughtful-${post.id}-${memberId}`, createdAt);
+        let eventForConsequence: SocialRitualEvent | undefined;
+        setPosts(prev => prev.map(item => {
+          if (item.id !== post.id || !item.communitySession || (item.comments || []).some(existing => existing.id === comment.id)) return item;
+          const nextSession = recordRitualMessage(item.communitySession, memberId, content, Date.now(), `ritual-open-message-${post.id}-${memberId}`);
+          eventForConsequence = nextSession.timeline?.find(timelineEvent => timelineEvent.id === `ritual-open-message-${post.id}-${memberId}`);
+          return { ...item, comments: [...(item.comments || []), comment], communitySession: nextSession };
+        }));
+        if (eventForConsequence) applyRitualConsequences(post, [eventForConsequence]);
+        recordNpcInteraction(memberId, post.content, content, `ritual-open-${post.id}`);
+      }
+
+      setPosts(prev => prev.map(item => item.id === post.id && item.communitySession
+        ? { ...item, communitySession: { ...item.communitySession, careReading: reading, replyState: 'ready' } }
+        : item));
+    } finally {
+      circleRepliesInFlightRef.current.delete(post.id);
+    }
+  };
+
+  useEffect(() => {
+    posts.filter(post => post.communitySession?.replyState === 'thinking' && !(post.comments || []).some(comment => comment.id.startsWith(`circle-thoughtful-${post.id}-`))).slice(0, 3).forEach(post => { void addThoughtfulCircleReplies(post); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts.map(post => `${post.id}:${post.communitySession?.replyState || ''}`).join('|')]);
 
   const createPost = () => {
     const content = newPostContent.trim();
@@ -1803,35 +1988,35 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
     const isChallenge = postIntent === 'challenge';
     const now = Date.now();
     const createdAt = new Date(now).toISOString();
-    const memberIds = CIRCLE_MEMBERS[postIntent];
+    const postId = `cw-post-${now}-${Math.random().toString(36).slice(2, 7)}`;
+    const memberIds = chooseRitualMembers(postIntent, postId, SOCIAL_PERSONAS.map((persona:any) => persona.id));
     const habitTitle = postIntent === 'confide' ? '' : (selectedChallengeHabit?.title || content);
-    const checkInDelay = postIntent === 'confide' ? 90 * 60_000 : postIntent === 'companion' ? 4 * 60 * 60_000 : 12 * 60 * 60_000;
-    const openingComments = memberIds.slice(0, 2).map((memberId, index) => circleComment(
-      memberId,
-      circleOpeningLine(memberId, postIntent, content, habitTitle),
-      `circle-open-${now}-${memberId}`,
-      new Date(now + index * 1000).toISOString(),
-    ));
+    const careReading = inferCareReading(content, postIntent);
+    const checkInDelay = postIntent === 'confide' ? 12 * 60 * 60_000 : postIntent === 'companion' ? 6 * 60 * 60_000 : 24 * 60 * 60_000;
+    const ritualSession = createSocialRitual({
+      postId,
+      mode: postIntent,
+      content,
+      habitId: postIntent === 'confide' ? undefined : selectedChallengeHabit?.id,
+      habitTitle: habitTitle || undefined,
+      memberIds,
+      startedAt: now,
+      checkInAt: now + checkInDelay,
+      userCompleted: postIntent !== 'confide' && !!selectedChallengeHabit && todayCompletedIds.includes(selectedChallengeHabit.id),
+    });
     const post: SocialPost = {
-      id: `cw-post-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      id: postId,
       authorName: userName || 'Bạn',
       authorAvatar: userAvatar,
       content,
       type: 'habit',
       createdAt,
       likes: 0,
-      comments: openingComments,
+      comments: [],
       communityIntent: postIntent,
       communitySession: {
-        mode: postIntent,
-        memberIds,
-        startedAt: createdAt,
-        checkInAt: new Date(now + checkInDelay).toISOString(),
-        habitId: postIntent === 'confide' ? undefined : selectedChallengeHabit?.id,
-        habitTitle: habitTitle || undefined,
-        npcCompletedIds: [],
-        userCompleted: postIntent !== 'confide' && !!selectedChallengeHabit && todayCompletedIds.includes(selectedChallengeHabit.id),
-        status: 'active',
+        ...ritualSession,
+        careReading,
       },
       challenge: isChallenge ? {
         habitId: selectedChallengeHabit?.id,
@@ -1847,22 +2032,86 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
     setNewPostContent('');
     onPostCreated(post);
     queueUserPostReactions(post, SOCIAL_PERSONAS, worldRef.current.npc);
+    applyRitualConsequences(post, ritualSession.timeline || []);
+    void addThoughtfulCircleReplies(post);
   };
 
   const toggleSupport = (postId: string) => {
     const wasSupported = !!supportedPosts[postId];
+    const targetPost = postsRef.current.find(post => post.id === postId);
+    const supportId = `ritual-support-${postId}-local-user`;
     setSupportedPosts(prev => ({ ...prev, [postId]: !wasSupported }));
     setPosts(prev => prev.map(post => post.id === postId
-      ? { ...post, likes: Math.max(0, (post.likes || 0) + (wasSupported ? -1 : 1)) }
+      ? {
+          ...post,
+          likes: Math.max(0, (post.likes || 0) + (wasSupported ? -1 : 1)),
+          communitySession: !wasSupported && post.communitySession && !(post.communitySession.timeline || []).some(event => event.id === supportId)
+            ? recordSupportAction(post.communitySession, 'local-user', Date.now(), supportId)
+            : post.communitySession,
+        }
       : post));
+    if (!wasSupported && targetPost) {
+      const author = SOCIAL_PERSONAS.find((persona:any) => persona.name === targetPost.authorName);
+      if (author) {
+        updateRelationship(author.id, 'local-user', { closeness: .014, trust: .012, affection: .018, emotionalSafety: .012 }, 'user chủ động gửi tín hiệu nâng đỡ');
+        remember(author.id, { type: 'relationship', subject: 'user đã chăm sóc mình', content: `User gửi nâng đỡ vào lúc: ${targetPost.content}`.slice(0, 180), salience: .7, emotionalWeight: .66, confidence: .98, decayHalfLifeHours: 1200, sourceId: supportId });
+      }
+    }
   };
 
   const joinChallenge = (postId: string) => {
     if (joinedChallenges[postId]) return;
     setJoinedChallenges(prev => ({ ...prev, [postId]: true }));
     setPosts(prev => prev.map(post => post.id === postId && post.challenge
-      ? { ...post, challenge: { ...post.challenge, participants: post.challenge.participants + 1 } }
+      ? {
+          ...post,
+          challenge: { ...post.challenge, participants: post.challenge.participants + 1, participantIds: [...new Set([...(post.challenge.participantIds || []), 'local-user'])] },
+          communitySession: post.communitySession
+            ? { ...post.communitySession, timeline: [...(post.communitySession.timeline || []), { id: `ritual-${post.id}-user-joined`, kind: 'joined', actorId: 'local-user', at: new Date().toISOString(), visibility: 'timeline' }] }
+            : post.communitySession,
+        }
       : post));
+  };
+
+  const replyInsideRitual = async (post: SocialPost, userText: string, sourceId: string) => {
+    const session = post.communitySession;
+    if (!session || session.status === 'completed' || ritualActionsInFlightRef.current.has(sourceId)) return;
+    ritualActionsInFlightRef.current.add(sourceId);
+    try {
+      const lastNpcId = [...(post.comments || [])].reverse().find(comment => comment.authorId.startsWith('hm-'))?.authorId;
+      const available = (session.participants || [])
+        .filter(item => !['declined','failed','left'].includes(item.status))
+        .map(item => item.npcId);
+      const responderId = available.find(id => id !== lastNpcId) || available[0] || session.memberIds[0];
+      const persona = SOCIAL_PERSONAS.find((item:any) => item.id === responderId);
+      if (!persona) return;
+      const npc = worldRef.current.npc[responderId] || createNpcState(persona);
+      const nextNeed = inferRitualNeed(userText);
+      const effectiveNeed = session.conversationNeed === 'LISTEN_ONLY' && nextNeed !== 'ASK_FOR_ADVICE'
+        ? 'LISTEN_ONLY'
+        : nextNeed === 'UNKNOWN' ? session.conversationNeed : nextNeed;
+      const transcript = [...(post.comments || []), { authorName: userName || 'Bạn', content: userText } as SocialComment]
+        .slice(-8).map(comment => `${comment.authorName}: ${comment.content}`).join(' | ');
+      const replyPost: SocialPost = { ...post, content: userText, communitySession: { ...session, conversationNeed: effectiveNeed } };
+      const actionContext = `SOCIAL RITUAL V23.9 đang tiếp diễn. User vừa trả lời, không được khởi động lại hội thoại. Need hiện tại=${effectiveNeed || 'UNKNOWN'}. Lịch sử: ${transcript}. Hãy quyết định như cùng một con người ngoài feed: có thể xác nhận mình hiểu thêm, hỏi đúng một câu, nói vụng, hoặc để khoảng trống. LISTEN_ONLY tuyệt đối không khuyên.`;
+      let content = await askAiReply(persona, replyPost, npc, actionContext);
+      if (!content || weakLegacySocialLine(content)) content = ritualCareFallback(responderId, userText, effectiveNeed)
+        || soulFallbackReply(responderId, persona.name, userText, npc.relationship, sourceId);
+      const createdAt = new Date().toISOString();
+      const reply = circleComment(responderId, content, `ritual-reply-${sourceId}-${responderId}`, createdAt);
+      let consequenceEvent: SocialRitualEvent | undefined;
+      setPosts(prev => prev.map(item => {
+        if (item.id !== post.id || !item.communitySession || (item.comments || []).some(comment => comment.id === reply.id)) return item;
+        const eventId = `ritual-message-${sourceId}-${responderId}`;
+        const nextSession = recordRitualMessage({ ...item.communitySession, conversationNeed: effectiveNeed }, responderId, content, Date.now(), eventId);
+        consequenceEvent = nextSession.timeline?.find(event => event.id === eventId);
+        return { ...item, comments: [...(item.comments || []), reply], communitySession: { ...nextSession, replyState: 'ready' } };
+      }));
+      if (consequenceEvent) applyRitualConsequences(post, [consequenceEvent]);
+      recordNpcInteraction(responderId, userText, content, sourceId);
+    } finally {
+      ritualActionsInFlightRef.current.delete(sourceId);
+    }
   };
 
   const addUserComment = (postId: string) => {
@@ -1876,9 +2125,17 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
       content: text,
       createdAt: new Date().toISOString(),
     };
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p));
+    const targetPost = postsRef.current.find(post => post.id === postId);
+    setPosts(prev => prev.map(p => p.id === postId ? {
+      ...p,
+      comments: [...(p.comments || []), comment],
+      communitySession: p.communitySession
+        ? { ...recordRitualMessage(p.communitySession, 'local-user', text, Date.now(), `ritual-user-message-${comment.id}`), replyState: p.communitySession.status === 'active' ? 'thinking' : p.communitySession.replyState }
+        : p.communitySession,
+    } : p));
     queueUserPostReactions({ id: comment.id, targetPostId: postId, content: text, createdAt: comment.createdAt }, SOCIAL_PERSONAS, worldRef.current.npc);
     setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+    if (targetPost?.communitySession?.status === 'active') void replyInsideRitual(targetPost, text, comment.id);
   };
 
   const activeNpcCount = (Object.values(world.npc) as NpcState[]).filter(n => n.mood !== 'tired').length;
@@ -1915,7 +2172,7 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
       <div className="rounded-3xl border border-fuchsia-500/20 bg-gradient-to-br from-slate-900/90 via-slate-900/75 to-fuchsia-950/20 p-6 shadow-2xl">
         <div className="flex flex-col lg:flex-row lg:items-center gap-5 justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-fuchsia-300 font-black"><Activity size={15} /> Cộng đồng ảo <span className="ml-1 rounded-md border border-fuchsia-400/25 bg-fuchsia-400/10 px-1.5 py-0.5 text-[8px] tracking-[.16em] text-fuchsia-200">V23.8 LIVING · LIFE STORY</span></div>
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-fuchsia-300 font-black"><Activity size={15} /> Cộng đồng ảo <span className="ml-1 rounded-md border border-fuchsia-400/25 bg-fuchsia-400/10 px-1.5 py-0.5 text-[8px] tracking-[.16em] text-fuchsia-200">V23.9 · SOCIAL RITUALS</span></div>
             <h3 className="text-2xl font-black text-white mt-2">Một nơi để được hiểu, rồi cùng nhau lớn lên</h3>
             <p className="text-sm text-slate-400 mt-2 max-w-3xl">Ở đây bạn có thể nói thật khi mệt, tìm một người cùng bước, hoặc mở một cuộc đua lành mạnh. Mỗi câu chuyện được lắng nghe, mỗi thử thách phải dẫn về một hành động thật.</p>
           </div>
@@ -2002,7 +2259,7 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
           </div>
 
           <div className="rounded-3xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-            <div className="p-5 border-b border-slate-800"><div className="flex items-center justify-between gap-3"><div><h4 className="font-black text-white">Chuyện đáng kể</h4><p className="text-xs text-slate-500 mt-1">Chỉ hiện bước ngoặt, va chạm, phát hiện hoặc tin đủ đáng bàn. Việc vặt không được đưa lên đây.</p></div><span className="text-[9px] font-black tracking-[.16em] text-cyan-400 border border-cyan-500/20 bg-cyan-500/10 rounded-full px-2.5 py-1">V23.8 LIFE STORY</span></div></div>
+            <div className="p-5 border-b border-slate-800"><div className="flex items-center justify-between gap-3"><div><h4 className="font-black text-white">Chuyện đáng kể</h4><p className="text-xs text-slate-500 mt-1">Chỉ hiện bước ngoặt, va chạm, phát hiện hoặc tin đủ đáng bàn. Việc vặt không được đưa lên đây.</p></div><span className="text-[9px] font-black tracking-[.16em] text-cyan-400 border border-cyan-500/20 bg-cyan-500/10 rounded-full px-2.5 py-1">V23.9 LIVING SOCIETY</span></div></div>
             <div className="divide-y divide-slate-800/60">{recentMoments.map((item:any)=>{const label=item.kind==='world'||item.kind==='world_story'?'THẾ GIỚI → ĐỜI SỐNG':item.kind==='relationship'||item.kind==='relationship_story'?'QUAN HỆ ĐANG TIẾP DIỄN':item.kind==='life_story'?(String(item.hook||'CHƯƠNG ĐỜI').toLocaleUpperCase('vi-VN')):item.kind==='small_fail'?'VƯỚNG THẬT':item.kind==='small_win'?'BƯỚC TIẾN':item.kind==='public'?'BÀI ĐĂNG':'ĐỜI SỐNG';return <div key={item.id} className="p-4 flex gap-3"><img src={item.npcAvatar} className="w-10 h-10 rounded-xl bg-slate-800"/><div className="min-w-0 flex-1"><div className="flex items-center gap-2 flex-wrap"><span className="text-xs font-black text-white">{item.npcName}</span><span className="text-[9px] text-slate-600">{new Date(item.at).toLocaleString('vi-VN')}</span><span className="text-[8px] uppercase tracking-wider text-cyan-400/80 border border-cyan-500/15 rounded-full px-1.5 py-0.5">{label}</span></div>{item.arcTitle&&<div className="mt-1 text-[10px] font-black text-fuchsia-300/80">↳ {item.arcTitle}</div>}<p className="text-sm text-slate-300 mt-1.5 leading-relaxed whitespace-pre-line">{item.text}</p></div></div>})}{!recentMoments.length&&<div className="p-8 text-center text-sm text-slate-500">Chưa có chuyện nào đủ đáng kể. Nhóm vẫn sống phía sau, nhưng app không biến mọi việc vặt thành “tin”.</div>}</div>
           </div>
 
@@ -2012,11 +2269,30 @@ const CommunityWorld: React.FC<CommunityWorldProps> = ({
                 <div className="p-4">
                   <div className="flex items-center gap-3"><img src={post.authorAvatar} className="w-10 h-10 rounded-xl bg-slate-800" /><div className="flex-1"><div className="flex items-center gap-2 flex-wrap"><div className="text-sm font-black text-white">{post.authorName}</div>{post.communityIntent && <span className={`text-[8px] uppercase tracking-wider rounded-full border px-1.5 py-0.5 ${post.communityIntent === 'confide' ? 'border-rose-500/20 text-rose-300' : post.communityIntent === 'companion' ? 'border-cyan-500/20 text-cyan-300' : 'border-amber-500/20 text-amber-300'}`}>{intentLabel(post.communityIntent)}</span>}</div><div className="text-[9px] uppercase tracking-widest text-slate-600">{new Date(post.createdAt).toLocaleString()}</div></div></div>
                   <p className="text-sm text-slate-300 leading-relaxed mt-3 whitespace-pre-line">{post.content}</p>
-                  {post.communitySession && (() => { const session=post.communitySession; const members=session.memberIds.map(id=>SOCIAL_PERSONAS.find((persona:any)=>persona.id===id)).filter(Boolean); const completed=(session.userCompleted?1:0)+session.npcCompletedIds.length; const total=session.memberIds.length+1; const tone=session.mode==='confide'?'rose':session.mode==='companion'?'cyan':'amber'; return <div className={`mt-3 rounded-2xl border p-3 ${tone==='rose'?'border-rose-500/20 bg-rose-500/5':tone==='cyan'?'border-cyan-500/20 bg-cyan-500/5':'border-amber-500/20 bg-amber-500/5'}`}><div className="flex items-start justify-between gap-3"><div><div className={`flex items-center gap-2 text-[10px] uppercase tracking-wider font-black ${tone==='rose'?'text-rose-300':tone==='cyan'?'text-cyan-300':'text-amber-300'}`}>{session.mode==='confide'?<HandHeart size={14}/>:session.mode==='companion'?<Users size={14}/>:<Swords size={14}/>} {session.mode==='confide'?'Vòng lắng nghe':session.mode==='companion'?'Nhóm cùng tiến':'Kèo 24 giờ'}</div>{session.habitTitle&&<div className="mt-1.5 text-sm font-black text-white">{session.habitTitle}</div>}</div><span className={`text-[8px] uppercase tracking-wider rounded-full border px-2 py-1 ${session.status==='completed'?'border-emerald-500/20 text-emerald-300':'border-slate-700 text-slate-500'}`}>{session.status==='completed'?'Đã khép lại':'Đang diễn ra'}</span></div><div className="mt-3 flex items-center gap-2"><div className="flex -space-x-2">{members.map((member:any)=><img key={member.id} src={member.avatar} title={member.name} className="w-8 h-8 rounded-full border-2 border-slate-900 bg-slate-800"/>)}</div><div className="text-[10px] text-slate-400">{members.map((member:any)=>member.name).join(' · ')}</div></div>{session.mode==='confide'?<div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-500"><Timer size={12}/> Sẽ quay lại hỏi thăm lúc {new Date(session.checkInAt).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}</div>:<div className="mt-3"><div className="flex items-center justify-between text-[10px]"><span className="text-slate-500">Tiến độ bằng hành động thật</span><span className="font-black text-slate-200">{completed}/{total} đã xong</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-950"><div className={`h-full rounded-full ${tone==='cyan'?'bg-cyan-400':'bg-amber-400'}`} style={{width:`${Math.round(completed/total*100)}%`}}/></div>{post.challenge&&<div className="mt-2 text-[9px] text-slate-600">Kết thúc {new Date(post.challenge.deadline).toLocaleString('vi-VN')}</div>}</div>}</div>; })()}
+                  {post.communitySession && (() => {
+                    const session = post.communitySession;
+                    const participants = session.participants || session.memberIds.map(npcId => ({ npcId, status: 'joined' as const, progress: session.npcCompletedIds.includes(npcId) ? 100 : 0 }));
+                    const members = participants.map(participant => ({ participant, persona: SOCIAL_PERSONAS.find((persona:any) => persona.id === participant.npcId) })).filter(item => item.persona);
+                    const activeParticipants = participants.filter(participant => !['declined','left'].includes(participant.status));
+                    const completed = (session.userCompleted ? 1 : 0) + activeParticipants.filter(participant => participant.status === 'completed').length;
+                    const total = Math.max(1, activeParticipants.length + 1);
+                    const progress = session.mode === 'confide' ? 0 : Math.round(((session.userCompleted ? 100 : 0) + activeParticipants.reduce((sum, participant) => sum + Number(participant.progress || 0), 0)) / total);
+                    const tone = session.mode === 'confide' ? 'rose' : session.mode === 'companion' ? 'cyan' : 'amber';
+                    const needLabel: Record<string,string> = { LISTEN_ONLY:'Chỉ lắng nghe', VENT:'Cho phép xả', ASK_FOR_ADVICE:'Đang xin lời khuyên', NEED_REASSURANCE:'Cần được trấn an', NEED_DISTRACTION:'Cần đổi không khí', NEED_HELP:'Cần giúp thật', UNKNOWN:'Chưa vội kết luận' };
+                    const timeline = (session.timeline || []).filter(event => event.visibility === 'timeline' && event.kind !== 'ritual_created').slice(-6);
+                    return <div className={`mt-3 rounded-2xl border p-3 ${tone==='rose'?'border-rose-500/20 bg-rose-500/5':tone==='cyan'?'border-cyan-500/20 bg-cyan-500/5':'border-amber-500/20 bg-amber-500/5'}`}>
+                      <div className="flex items-start justify-between gap-3"><div><div className={`flex items-center gap-2 text-[10px] uppercase tracking-wider font-black ${tone==='rose'?'text-rose-300':tone==='cyan'?'text-cyan-300':'text-amber-300'}`}>{session.mode==='confide'?<HandHeart size={14}/>:session.mode==='companion'?<Users size={14}/>:<Swords size={14}/>} {session.mode==='confide'?'Vòng lắng nghe':session.mode==='companion'?'Nhóm cùng tiến':'Kèo 24 giờ'}</div>{session.habitTitle&&<div className="mt-1.5 text-sm font-black text-white">{session.habitTitle}</div>}</div><span className={`text-[8px] uppercase tracking-wider rounded-full border px-2 py-1 ${session.status==='completed'?'border-emerald-500/20 text-emerald-300':'border-slate-700 text-slate-500'}`}>{session.status==='completed'?'Đã khép lại':'Đang diễn ra'}</span></div>
+                      {session.mode === 'confide' && <div className="mt-2 inline-flex rounded-full border border-rose-500/15 bg-rose-500/5 px-2 py-1 text-[9px] text-rose-200/70">{needLabel[session.conversationNeed || 'UNKNOWN']}</div>}
+                      <div className="mt-3 flex flex-wrap gap-2">{members.map(({participant,persona}:any)=><div key={persona.id} className={`flex items-center gap-1.5 rounded-full border px-2 py-1 ${participant.status==='declined'?'border-slate-800 text-slate-600 opacity-65':participant.status==='seen'||participant.status==='tentative'||participant.status==='invited'?'border-slate-700 text-slate-500':'border-slate-700/80 text-slate-300'}`}><img src={persona.avatar} title={persona.name} className="h-5 w-5 rounded-full bg-slate-800"/><span className="text-[9px]">{persona.name}</span><span className="text-[8px] uppercase text-slate-600">{participant.status==='seen'?'đã xem':participant.status==='tentative'?'chưa chắc':participant.status==='invited'?'được mời':participant.status==='declined'?'từ chối':participant.status==='active'?'đang làm':participant.status==='completed'?'xong':participant.status==='failed'?'trượt':'đã vào'}</span></div>)}</div>
+                      {session.mode==='confide'?<div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-500"><Timer size={12}/> Sẽ quay lại hỏi thăm lúc {new Date(session.checkInAt).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}</div>:<div className="mt-3"><div className="flex items-center justify-between text-[10px]"><span className="text-slate-500">Tiến độ từ hành động thật</span><span className="font-black text-slate-200">{completed}/{total} hoàn thành · {progress}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-950"><div className={`h-full rounded-full ${tone==='cyan'?'bg-cyan-400':'bg-amber-400'}`} style={{width:`${Math.max(0,Math.min(100,progress))}%`}}/></div>{post.challenge&&<div className="mt-2 text-[9px] text-slate-600">Kết thúc {new Date(post.challenge.deadline).toLocaleString('vi-VN')}</div>}</div>}
+                      {timeline.length > 0 && <div className="mt-3 space-y-1.5 border-t border-slate-800/70 pt-3">{timeline.map(event => { const actorName=event.actorId==='local-user'?(userName||'Bạn'):event.actorId==='system'?'Hệ thống':SOCIAL_PERSONAS.find((persona:any)=>persona.id===event.actorId)?.name||'Một người'; const label=ritualEventLabel(event.kind,actorName,event.progress); return label?<div key={event.id} className="flex items-start gap-2 text-[9px] text-slate-500"><Clock3 size={11} className="mt-0.5 shrink-0 text-slate-700"/><span className="w-10 shrink-0 text-slate-700">{new Date(event.at).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}</span><span>{label}</span></div>:null;})}</div>}
+                    </div>;
+                  })()}
                   <div className="flex flex-wrap items-center gap-5 mt-4 pt-3 border-t border-slate-800/70"><button onClick={() => toggleSupport(post.id)} className={`text-xs flex items-center gap-1.5 ${supportedPosts[post.id] ? 'text-rose-400 font-black' : 'text-slate-500 hover:text-rose-400'}`}><Heart size={15} className={supportedPosts[post.id] ? 'fill-rose-400' : ''} /> {post.communityIntent === 'confide' ? 'Nâng đỡ' : 'Tiếp sức'} · {post.likes}</button>{post.challenge && <button onClick={() => joinChallenge(post.id)} disabled={joinedChallenges[post.id]} className={`text-xs flex items-center gap-1.5 ${joinedChallenges[post.id] ? 'text-emerald-400' : 'text-amber-400 hover:text-amber-300'}`}><Swords size={15}/>{joinedChallenges[post.id] ? 'Đã nhận kèo' : 'Nhận kèo'}</button>}<button onClick={() => setExpanded(prev => ({ ...prev, [post.id]: !prev[post.id] }))} className="text-xs text-slate-500 hover:text-fuchsia-400 flex items-center gap-1.5"><MessageCircle size={15} /> Trò chuyện · {(post.comments || []).length}</button></div>
                 </div>
                 {(expanded[post.id] || (post.comments || []).length > 0) && (
                   <div className="border-t border-slate-800 bg-slate-950/25 p-4 space-y-3">
+                    {post.communitySession?.replyState === 'thinking' && <div className="flex items-center gap-2 rounded-2xl border border-fuchsia-500/10 bg-fuchsia-500/5 px-3 py-2 text-[10px] text-fuchsia-200/70"><Brain size={13} className="animate-pulse"/> Mọi người đang đọc kỹ điều bạn nói, không trả lời vội...</div>}
                     {(post.comments || []).slice(-8).map(comment => <div key={comment.id} className="flex gap-2"><img src={comment.authorAvatar} className="w-8 h-8 rounded-lg bg-slate-800" /><div className="rounded-2xl rounded-tl-none bg-slate-800/55 px-3 py-2 flex-1"><div className="text-[10px] font-black text-amber-400">{comment.authorName}</div><div className="text-xs text-slate-300 mt-0.5">{comment.content}</div><div className="text-[8px] text-slate-600 mt-1">{new Date(comment.createdAt).toLocaleString()}</div></div></div>)}
                     <div className="flex gap-2"><input value={commentInputs[post.id] || ''} onChange={e => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addUserComment(post.id)} placeholder="Bình luận..." className="flex-1 rounded-xl bg-slate-900 border border-slate-800 px-3 py-2 text-xs text-white outline-none" /><button onClick={() => addUserComment(post.id)} className="w-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center"><Send size={14} /></button></div>
                   </div>

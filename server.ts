@@ -101,7 +101,7 @@ async function startServer() {
   // API Route for Persona Comments (Deep understanding of books)
   app.post("/api/generate-persona-comment", async (req, res) => {
     try {
-      const { personaName, personaRole, bookTitle, postContent, category, bookContent } = req.body;
+      const { personaName, personaRole, bookTitle, postContent, category, bookContent, empathyContext, actionContext, relationshipStage, userMemory } = req.body;
       
       const contextInfo = bookTitle 
         ? `- Tác phẩm đang thảo luận: "${bookTitle}"\n        - Nội dung trích đoạn từ sách: "${bookContent ? bookContent : "Không có dữ liệu bài viết"}"\n        - Nội dung bài đăng của người dùng: "${postContent}"` 
@@ -115,14 +115,19 @@ async function startServer() {
       
       Bối cảnh kiến thức (Context): 
       ${contextInfo}
+      - Quan hệ hiện tại: ${relationshipStage || 'chưa thân'}
+      - Ký ức liên quan: ${Array.isArray(userMemory) ? userMemory.join(' | ') : (userMemory || 'chưa có')}
+      - Đọc cảm xúc sơ bộ (chỉ là giả thuyết): ${empathyContext || 'chưa có'}
+      - Vai trò trong lượt nói này: ${actionContext || 'phản hồi tự nhiên'}
       
       Yêu cầu để bình luận GIỐNG NGƯỜI THẬT nhất:
       1. GIỌNG ĐIỆU CÁ NHÂN HÓA CAO: Đừng nói như một cái máy hay AI trả lời câu hỏi. Hãy dùng các thán từ mộc mạc (Ví dụ: "Trời ơi", "Wow", "Haha", "Ơ kìa"...).
-      2. TÍCH CỰC, HÀI HƯỚC & DÍ DỎM: Bình luận phải mang năng lượng tích cực, hài hước, mặn mà, tinh tế và duyên dáng (kiểu vô tri đáng yêu hoặc sắc sảo một cách buồn cười, tùy persona của bạn). Hãy tham khảo cách nói chuyện của những GenZ hoặc những người vui tính trên mạng xã hội.
+      2. QUAN TÂM ĐÚNG NHỊP: Không ép tích cực, không mặc định đùa. Nếu người dùng đang mất mát, xấu hổ, quá tải hoặc chỉ cần được nghe, hãy hạ giọng và bám vào một chi tiết cụ thể.
       3. ĐỌC VÀ PHÂN TÍCH SÂU THỰC SỰ: 
          - Nếu có "Nội dung trích đoạn từ sách": LỰA CHỌN MỘT Ý TƯỞNG HAY NHẤT, sâu sắc nhất từ phần trích đoạn đó để bình luận về BÀI ĐĂNG CỦA NGƯỜI DÙNG. Phân tích nội dung chia sẻ đó theo một góc nhìn mới lạ, sắc sảo dưới hệ quy chiếu của ${personaName}. Tuyệt đối không bình luận chung chung, máy móc. Hãy mượn ý trong sách để ví von một cách hài hước, NHƯNG CHỦ ĐỀ CHÍNH VẪN PHẢI LÀ NỘI DUNG NGƯỜI DÙNG CHIA SẺ, KHÔNG PHẢI CUỐN SÁCH.
          - Nếu KHÔNG có sách: Đưa ra một góc nhìn độc đáo, dí dỏm bằng cách BÌNH LUẬN TRỰC TIẾP vào "Nội dung bài đăng của người dùng" dựa vào chất giọng của ${personaName}.
       4. NGÔN NGỮ TỰ NHIÊN: Tiếng Việt đời thường, phong phú, đôi khi là những câu "cà khịa" hài hước để người ta bàn luận thêm. Bỏ những từ sáo rỗng như "Cố lên", "Tuyệt vời". Mọi thứ phải "mặn chát" nhưng duyên!
+      5. SUY LUẬN THẦM TRƯỚC KHI NÓI: phân biệt điều user thật sự nói với điều bạn chỉ đang đoán; xét nhu cầu, ký ức quan hệ và nguy cơ hiểu sai; chọn đúng một động tác quan tâm. Không in phân tích hay các bước suy luận, chỉ trả comment cuối. Nếu chưa chắc, hỏi hiệu chỉnh nhẹ thay vì khẳng định đọc được tâm trí.
       
       Ngôn ngữ: Tiếng Việt.`;
 
